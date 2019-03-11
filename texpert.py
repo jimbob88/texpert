@@ -1,3 +1,34 @@
+# Texpert Text Editor
+# Originally made by David Lawson (https://github.com/linuxlawson/texpert)
+# Rebuilt and maintained by James Blackburn (https://github.com/jimbob88/texpert)
+
+# Original copyright message saved for prosperity:
+# """\n\nMIT License
+#
+# Copyright (c) 2019 David Lawson
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation
+# files (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+# ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+# TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+# DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+# CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+# IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.\n"""
+
+
 import os
 import sys
 import time
@@ -33,18 +64,23 @@ class texpert_win:
 
 		self.menu = tk.Menu(self.master, bd=1, relief='flat')
 		self.master.config(menu=self.menu, bd=1)
+		self.master.protocol("WM_DELETE_WINDOW", self.x_click)
 
 		self.texpert = CustomText(self.master, bg="white", maxundo=-1, font=("Arial", 11))
-		self.texpert.grid(row=0, column=0, sticky='nsew')
+		self.texpert.grid(row=0, column=0, sticky='nsew', padx=2, pady=2)
 		self.texpert.focus_set()
 		#self.texpert.bind('<Key>', self.colour_in)
 
 		# toolBar
-		self.toolbar = tk.Frame(self.master, bd=2, relief='groove')
-		self.open_butt = tk.Button(self.toolbar, text="Open", width=4, command=self.open_com)
+		self.toolbar = ttk.Frame(self.master, borderwidth=1,relief='groove')
+		self.open_butt = ttk.Button(self.toolbar, text="Open", width=4.5, command=self.open_com)
 		self.open_butt.pack(side=tk.LEFT, padx=4, pady=2)
 
-		self.save_butt = tk.Button(self.toolbar, text="Save", width=4, command=self.saveas_com)
+		self.mode_butt = ttk.Button(self.toolbar, text="Mode", width=4.5)
+		self.mode_butt.pack(side=tk.LEFT, padx=4, pady=2)
+		self.mode_butt.bind("<Button-1>", self.mode_popup)
+
+		self.save_butt = ttk.Button(self.toolbar, text="Save", width=5, command=self.save_com)
 		self.save_butt.pack(side=tk.RIGHT, padx=4, pady=2)
 		self.toolbar.grid(row=1, column=0, sticky='ew')
 
@@ -54,7 +90,7 @@ class texpert_win:
 		self.filemenu.add_command(label="New", command=self.new_com)
 		self.filemenu.add_command(label="Open", command=self.open_com)
 		self.filemenu.add_separator()
-		self.filemenu.add_command(label="Save", command=self.saveas_com)
+		self.filemenu.add_command(label="Save", command=self.save_com)
 		self.filemenu.add_command(label="Save As", command=self.saveas_com)
 		self.filemenu.add_separator()
 		self.filemenu.add_command(label="Close", command=self.close_com)
@@ -64,7 +100,6 @@ class texpert_win:
 		self.editmenu = tk.Menu(self.menu, tearoff=0)
 		self.menu.add_cascade(label="Edit ", menu=self.editmenu)
 		self.editmenu.add_command(label="Undo", command=self.undo_com, accelerator="Ctrl+Z")
-		self.texpert.bind("<Control-Key-z>", lambda e: self.undo_com)
 		self.editmenu.add_command(label="Redo", command=self.redo_com, accelerator="Shift+Ctrl+Z")
 		self.editmenu.add_separator()
 		self.editmenu.add_command(label="Cut", command=self.cut_com, accelerator="Ctrl+X")
@@ -75,6 +110,8 @@ class texpert_win:
 		self.texpert.bind("<Control-Key-v>", lambda e: self.undo_com)
 		self.editmenu.add_separator()
 		self.editmenu.add_command(label="Select All", command=self.select_all, accelerator="Ctrl+A")
+		self.editmenu.add_separator()
+		self.editmenu.add_command(label="Find", command=self.find_win, accelerator="Ctrl+F")
 
 		#view menu
 		self.viewmenu = tk.Menu(self.menu, tearoff=0)
@@ -94,12 +131,14 @@ class texpert_win:
 		#sub-menu for: [view > mode]
 		self.submenu = tk.Menu(self.menu, tearoff=0)
 		self.viewmenu.add_cascade(label="Mode ", menu=self.submenu)
-		self.submenu.add_command(label=" Dark", command=self.dark_mode, activebackground="#181818", activeforeground="#F5F5F5")
-		self.submenu.add_command(label=" Light", command=self.light_mode, activebackground="#F5F5F5", activeforeground="#181818")
-		self.submenu.add_command(label=" Legal Pad", command=self.legal_mode, activebackground="#FFFFCC", activeforeground="#181818")
-		self.submenu.add_command(label=" Night Vision", command=self.green_mode, activebackground="#181818", activeforeground="#00FF33")
-		self.submenu.add_command(label=" Desert View", command=self.desert_mode, activebackground="#E9DDB3", activeforeground="#40210D")
-		self.submenu.add_command(label=" Chocolate Mint", command=self.mint_mode, activebackground="#BDFCC9", activeforeground="#40210D")
+		self.mode_var = tk.StringVar()
+		self.mode_var.trace('w', lambda *args: self.change_mode())
+		self.submenu.add_checkbutton(label=" Dark", variable=self.mode_var, onvalue='Dark', activebackground="#181818", activeforeground="#F5F5F5")
+		self.submenu.add_checkbutton(label=" Light", variable=self.mode_var, onvalue='Light', activebackground="#F5F5F5", activeforeground="#181818")
+		self.submenu.add_checkbutton(label=" Legal Pad", variable=self.mode_var, onvalue='Legal Pad', activebackground="#FFFFCC", activeforeground="#181818")
+		self.submenu.add_checkbutton(label=" Night Vision", variable=self.mode_var, onvalue='Night Vision', activebackground="#181818", activeforeground="#00FF33")
+		self.submenu.add_checkbutton(label=" Desert View", variable=self.mode_var, onvalue='Desert View', activebackground="#E9DDB3", activeforeground="#40210D")
+		self.submenu.add_checkbutton(label=" Chocolate Mint", variable=self.mode_var, onvalue='Chocolate Mint', activebackground="#CCFFCC", activeforeground="#40210D")
 
 		self.viewmenu.add_separator()
 		self.viewmenu.add_command(label="Hide in Tray", command=self.tray_com)
@@ -111,7 +150,9 @@ class texpert_win:
 		self.menu.add_cascade(label="Tools ", menu=self.toolmenu)
 		self.toolmenu.add_command(label="Insert Time", command=self.time_com)
 		self.toolmenu.add_command(label="Insert Date", command=self.date_com)
-		self.toolmenu.add_command(label="Note Area", command=self.note_area)
+		self.is_notearea = tk.BooleanVar()
+		self.is_notearea.trace('w', lambda *args: self.note_area())
+		self.toolmenu.add_checkbutton(label="Note Area", variable=self.is_notearea)
 
 		#help menu
 		self.helpmenu = tk.Menu(self.menu, tearoff=0)
@@ -137,12 +178,16 @@ class texpert_win:
 	def r_click(self, event):
 		self.editmenu.tk_popup(event.x_root, event.y_root)
 
+	def x_click(self):
+		if tkMessageBox.askokcancel("Exit", "Unsaved work will be lost.\n\nAre you sure? "):
+			self.master.destroy()
+
 	# Menu Functions
 	# file menu
 	def new_com(self):
 		self.master.title("Untitled ")
-		file = None
-		self.texpert.delete(1.0, 'end-1c')
+		self.current_file = None
+		self.texpert.delete('1.0', 'end-1c')
 
 	def open_com(self, action='dialog'):
 		if action == 'dialog':
@@ -152,19 +197,21 @@ class texpert_win:
 		if file is not None:
 			self.current_file = file.name
 			contents = file.read()
-			self.texpert.delete(1.0, 'end-1c')
+			self.texpert.delete('1.0', 'end-1c')
 			self.texpert.insert('1.0', contents)
 			file.close()
 			if str(self.current_file)[-3:] == '.py':
 				self.file_type = 'Python'
+				self.inherit_idle_sett.set(True)
 				self.refresh_sett()
 
 
 	def save_com(self):
-		print ("Silent Save")
+		with open(self.current_file, 'w') as f:
+			self.saveas_com(file=f)
 
-	def saveas_com(self):
-		file = tkFileDialog.asksaveasfile(mode='w')
+	def saveas_com(self, file=None):
+		if file is None: file = tkFileDialog.asksaveasfile(mode='w')
 		if file is not None:
 			data = self.texpert.get('1.0', 'end-1c')
 			file.write(data)
@@ -172,8 +219,8 @@ class texpert_win:
 
 	def close_com(self):
 		self.master.title('')
-		file = None
-		self.texpert.delete(1.0, 'end-1c')
+		self.current_file = None
+		self.texpert.delete('1.0', 'end-1c')
 
 	def exit_com(self):
 		if tkMessageBox.askokcancel("Exit", "Do you really want to exit? "):
@@ -220,6 +267,27 @@ class texpert_win:
 		self.toolbar.grid(row=1, column=0, sticky='ew')
 
 	#sub-menu for: [view > mode]
+	def change_mode(self):
+		mode = self.mode_var.get()
+		if mode == 'Dark':
+			self.dark_mode()
+		elif mode == 'Light':
+			self.light_mode()
+		elif mode == 'Legal Pad':
+			self.legal_mode()
+		elif mode == 'Night Vision':
+			self.green_mode()
+		elif mode == 'Desert View':
+			self.desert_mode()
+		elif mode == 'Chocolate Mint':
+			self.mint_mode()
+
+	def mode_popup(self, event):
+		try:
+			self.submenu.post(event.x_root, event.y_root)
+		finally:
+			self.submenu.grab_release()
+
 	def dark_mode(self):
 
 		self.status["text"] = " Mode: Dark"
@@ -245,10 +313,9 @@ class texpert_win:
 		self.status["text"] = " Mode: Desert View"
 		self.texpert.config(background='#E9DDB3', fg='#40210D', insertbackground='#40210D')
 
-
 	def mint_mode(self):
 		self.status["text"] = " Mode: Chocolate Mint"
-		self.texpert.config(background='#BDFCC9', fg='#40210D', insertbackground='#40210D')
+		self.texpert.config(background='#CCFFCC', fg='#40210D', insertbackground='#40210D')
 
 	def tray_com(self):
 		self.master.iconify()
@@ -276,21 +343,27 @@ class texpert_win:
 
 	# note area
 	def note_area(self):
-		note = tk.LabelFrame(self.texpert, bd=0)
-		btn_frame = tk.Frame(note)
+		if not self.is_notearea.get() and 'note' in vars(self):
+			self.note.destroy()
+			return
+		self.note = tk.LabelFrame(self.texpert, bd=1, relief='ridge')
 
-		tx = tk.Text(note, height=22, width=18, relief='ridge')
+		btn_frame = tk.Frame(self.note)
+
+		tx = tk.Text(self.note, height=22, width=18, relief='ridge', padx=2, pady=2, wrap="word")
 		tx.insert('1.0', 'Notes here\nwill not be saved..')
 		#tx.bind("<FocusIn>", lambda args: tx.delete('0.0', 'end'))
-		tx.pack(side='top', fill=tk.BOTH, expand=True)
+		tx.grid(row=0, column=0, sticky='nsew')
+		self.note.grid_rowconfigure(0, weight=1)
+		self.note.grid_columnconfigure(0, weight=1)
 
-		a = tk.Button(note, text="Clear", width=4, command=lambda: tx.delete('1.0', tk.END))
+		a = ttk.Button(btn_frame, text="Clear", width=5, command=lambda: tx.delete('1.0', 'end-1c'))
 		a.pack(side='left', anchor=tk.S, padx=2, pady=2)
-		b = tk.Button(note, text="Close", width=4, command=note.destroy)
+		b = ttk.Button(btn_frame, text="Close", width=5, command=lambda: self.is_notearea.set(False))
 		b.pack(side='right', anchor=tk.S, padx=2, pady=2)
 
-		note.pack(side='right', fill=tk.Y, padx=0, pady=0)
-		btn_frame.pack(side='bottom', fill=tk.Y)
+		self.note.pack(side='right', fill=tk.Y, padx=0, pady=0)
+		btn_frame.grid(row=1, column=0, sticky='ew')
 
 
 	# help menu
@@ -299,9 +372,9 @@ class texpert_win:
 		win.title("About")
 		tk.Label(win, foreground='black', text="\n\n\nTexpert\n\nA small text editor designed for Linux.\n\nMade in Python with Tkinter\n\n\n").pack()
 
-		a = tk.Button(win, text="Credits", width=4, command=self.credits_com)
+		a = ttk.Button(win, text="Credits", width=4, command=self.credits_com)
 		a.pack(side=tk.LEFT, padx=8, pady=4)
-		b = tk.Button(win, text="Close", width=4, command=win.destroy)
+		b = ttk.Button(win, text="Close", width=4, command=win.destroy)
 		b.pack(side=tk.RIGHT, padx=8, pady=4)
 
 		win.transient(self.master)
@@ -312,11 +385,11 @@ class texpert_win:
 		win = Toplevel()
 		win.wm_attributes("-topmost", 0)
 		win.title("Credits")
-		tk.Label(win, foreground='#606060', text="\n\n\nCreated by David Lawson\n\n\nme = Person()\nwhile (me.awake()):\nme.code()\n\n").pack()
+		tk.Label(win, foreground='#606060', text="\n\n\nCreated by David Lawson and maintained by James Blackburn\n\n\nme = Person()\nwhile (me.awake()):\nme.code()\n\n").pack()
 
-		a = tk.Button(win, text="License", width=4, command=self.license_info)
+		a = ttk.Button(win, text="License", width=4, command=self.license_info)
 		a.pack(side=tk.LEFT, padx=8, pady=4)
-		b = tk.Button(win, text="Close", width=4, command=win.destroy)
+		b = ttk.Button(win, text="Close", width=4, command=win.destroy)
 		b.pack(side=tk.RIGHT, padx=8, pady=4)
 
 		win.transient(self.master)
@@ -327,9 +400,9 @@ class texpert_win:
 		win = tk.Toplevel()
 		win.wm_attributes("-topmost", 1)
 		win.title("License")
-		tk.Label(win, foreground='black', justify='left', text="""\n\nMIT License
+		copyright_text = """\n\nMIT License
 
-	Copyright (c) 2019 David Lawson
+	Copyright (c) 2019 James Blackburn
 
 	Permission is hereby granted, free of charge, to any person
 	obtaining a copy of this software and associated documentation
@@ -350,9 +423,11 @@ class texpert_win:
 	DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
 	CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 	IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-	DEALINGS IN THE SOFTWARE.\n""").pack()
+	DEALINGS IN THE SOFTWARE.\n"""
 
-		tk.Button(win, text='Close', command=win.destroy).pack()
+		tk.Label(win, foreground='black', justify='left', text=copyright_text).pack()
+
+		ttk.Button(win, text='Close', command=win.destroy).pack()
 		win.transient(self.master)
 		win.geometry('504x435')
 		win.wait_window()
@@ -361,9 +436,9 @@ class texpert_win:
 	def trouble_com(self):
 		win = tk.Toplevel()
 		win.title("Troubleshooting")
-		warning_text = "\n\nThis program was designed for Linux and\nmay not work on other operating systems. \n\nTexpert text editor is a work in progress\nand will probably never be complete.\n\n\nKnown Issues:\n\n'Show toolbar' is temporarily disabled\nbecause the toolbar refuses to remember\nits original position. I may or may not\nmake an attempt to fix this someday.\n\nThe 'Save' and 'Save As' options both work\nas 'save as'. This might be fixed someday.\n\n"
+		warning_text = "\n\nThis program was designed for Linux and\nmay not work on other operating systems. \n\nTexpert text editor is a work in progress\nand will probably never be complete.\n\n\nKnown Issues:\n\nNone\n\n"
 		tk.Label(win, foreground='black', justify='left', text=warning_text).pack()
-		tk.Button(win, text='Close', command=win.destroy).pack()
+		ttk.Button(win, text='Close', command=win.destroy).pack()
 		win.transient(self.master)
 		win.geometry('340x350')
 		win.wait_window()
@@ -375,11 +450,34 @@ class texpert_win:
 		self.texpert.frame.destroy()
 		del self.texpert
 		self.texpert = CustomText(self.master, bg="white", maxundo=-1, font=("Arial", 11))
-		self.texpert.grid(row=0, column=0, sticky='nsew')
+		self.texpert.grid(row=0, column=0, sticky='nsew', padx=2, pady=2)
 		self.texpert.insert(tk.END, text)
 		self.texpert.focus_set()
 
 		self.texpert.colour_py(self.inherit_idle_sett.get())
+
+	def find_win(self):
+		def search():
+			s = search_term.get()
+			if s:
+				idx = '1.0'
+				while 1:
+					idx = self.texpert.search(s, idx, nocase=1, stopindex=tk.END)
+					print(idx)
+					if not idx: break
+					lastidx = '%s+%dc' % (idx, len(s))
+					self.texpert.tag_add('sel', idx, lastidx)
+					idx = lastidx
+				print(lastidx)
+				#self.texpert.yview(tk.SCROLL, float(idx), 'units')
+		find_win = tk.Toplevel(self.master)
+
+		search_term = tk.StringVar()
+		tk.Entry(find_win, textvariable=search_term).grid(row=0, column=0, sticky='ew', padx=2, pady=2)
+
+		ttk.Button(find_win, text="Find", command=search).grid(row=0, column=1, padx=2, pady=2)
+
+
 
 class CustomText(tk.Text):
 	'''
@@ -401,7 +499,7 @@ class CustomText(tk.Text):
 		self.hbar = tk.Scrollbar(self.frame, command=self.xview, orient=tk.HORIZONTAL)
 		kw.update({'xscrollcommand': self._scroll(self.hbar)})
 
-		tk.Text.__init__(self, self.frame, **kw, undo=True)
+		tk.Text.__init__(self, self.frame, undo=True, **kw)
 		self.grid(row=0, column=0, sticky='nsew', padx=2, pady=2)
 		self.vbar.grid(row=0, column=1, sticky='nsew')
 		self.hbar.grid(row=1, column=0, sticky='nsew')
@@ -411,8 +509,14 @@ class CustomText(tk.Text):
 		# Copy geometry methods of self.frame without overriding Text
 		# methods -- hack!
 		text_meths = vars(tk.Text).keys()
-		methods = vars(tk.Pack).keys() | vars(tk.Grid).keys() | vars(tk.Place).keys()
-		methods = methods.difference(text_meths)
+		#methods = vars(tk.Pack).keys() | vars(tk.Grid).keys() | vars(tk.Place).keys()
+		if sys.version_info > (3, 0):
+			methods = tk.Pack.__dict__.keys() | tk.Grid.__dict__.keys() \
+				  | tk.Place.__dict__.keys()
+		else:
+			methods = tk.Pack.__dict__.keys() + tk.Grid.__dict__.keys() \
+				  + tk.Place.__dict__.keys()
+		methods = set(methods).difference(text_meths)
 
 		for m in methods:
 			if m[0] != '_' and m != 'config' and m != 'configure':
@@ -446,7 +550,7 @@ class CustomText(tk.Text):
 
 def main():
 	root = tk.Tk(className = "Texpert")
-	root.geometry("700x440")
+	root.geometry("700x444")
 	root.title("Texpert")
 	root.option_add("*Font", "TkDefaultFont 9")
 	texpert_gui = texpert_win(root)
